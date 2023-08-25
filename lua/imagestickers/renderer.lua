@@ -23,6 +23,49 @@ local badParents = {
     ["GModBase"] = true,
 }
 
+local pi = math.pi
+
+function ImageStickers.AnimationSmoother(f, z, r, x)
+    local self = {}
+
+    self.k1 = z / (pi * f)
+    self.k2 = 1 / ((2 * pi * f) * (2 * pi * f))
+    self.k3 = r * z / (2 * pi * f)
+    self.tcrit = 0.8 * (math.sqrt(4 * self.k2  + self.k1 * self.k1) - self.k1)
+    
+    self.xp = x
+    self.y = x
+    self.yd = 0
+    
+    self.lastupdate = CurTime()
+    local tolerance = 0.01
+    function self:update(x, xd)
+        if self.y - tolerance <= x and x <= self.y + tolerance then return end
+        
+        local t = CurTime() - self.lastupdate
+        if t == 0 then return end
+
+        if xd == nil then
+            xd = (x - self.xp)
+            self.xp = x
+        end
+        
+        local iterations = math.ceil(t / self.tcrit)
+        t = t / iterations
+        
+        for i = 0, iterations do
+            self.y = self.y + t * self.yd
+            self.yd = self.yd + t * (x + self.k3 * xd - self.y - self.k1 * self.yd) / self.k2
+        end
+        
+        self.lastupdate = CurTime()
+
+        return self.y
+    end
+
+    return self
+end
+
 hook.Add("RenderScene", "march.imagestickers.reset_render_order", function()
     renderIndex = 0
 
@@ -112,6 +155,14 @@ function ImageStickers.GetBorderRect3D(self)
 end
 
 function ImageStickers.RenderImageOntoSticker(self)
+    if not self.Smoothing then
+        local f, z, r = 4.461, 1.5, 1.91
+        self.Smoothing = {
+            ScaleX = ImageStickers.AnimationSmoother(f,z,r,1),
+            ScaleY = ImageStickers.AnimationSmoother(f,z,r,1),
+            Angle = ImageStickers.AnimationSmoother(f,z,r,0)
+        }
+    end
     --local stopwatchStart = SysTime()
     ImageStickers.UpdateAnimatedBorder(self, hoveredEnt == self)
 
@@ -145,6 +196,10 @@ function ImageStickers.RenderImageOntoSticker(self)
 
             w = math_Clamp(w * imageScaleX, 0.1, 9000000) 
             h = math_Clamp(h * imageScaleY, 0.1, 90000000) 
+
+            self.Smoothing.ScaleX:update(w)
+            self.Smoothing.ScaleY:update(h)
+            self.Smoothing.Angle:update(self:GetImageAngle())
             
             self:SetRenderBounds(Vector(-w, -h, -1), Vector(w, h, 1))
 
@@ -164,7 +219,7 @@ function ImageStickers.RenderImageOntoSticker(self)
             
             isRenderingImage = true
             cam.PushModelMatrix(m)
-                render.DrawQuadEasy(Vector(0, 0, -1.45), Vector(0,0,1), w/6.252, h/6.252, color_white, 180 - self:GetImageAngle())
+                render.DrawQuadEasy(Vector(0, 0, -1.45), Vector(0,0,1), self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
             cam.PopModelMatrix()
 
             render.SuppressEngineLighting(false) 
