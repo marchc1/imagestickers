@@ -13,6 +13,11 @@ local Vector = Vector
 local render_DrawLine = render.DrawLine
 local Angle = Angle
 
+local render_DrawQuadEasy = render.DrawQuadEasy
+local cam_PushModelMatrix = cam.PushModelMatrix
+local cam_PopModelMatrix = cam.PopModelMatrix
+local cam_Start3D2D = cam.Start3D2D
+
 local renderDebuggingInformation = false
 local renderIndex = 0
 
@@ -163,10 +168,11 @@ function ImageStickers.RenderImageOntoSticker(self)
             Angle = ImageStickers.AnimationSmoother(f,z,r,0)
         }
     end
+
     --local stopwatchStart = SysTime()
+    
     ImageStickers.UpdateAnimatedBorder(self, hoveredEnt == self)
 
-    local lv, la = self:LocalToWorld(Vector(0, 0,0.5)), self:LocalToWorldAngles(Angle(0,90,00))
     local TextResult = ""
     local image = self.image
     local imageScale = self:GetImageScale()
@@ -211,25 +217,21 @@ function ImageStickers.RenderImageOntoSticker(self)
                 m:Translate(self:GetPos())
                 m:Rotate(self:GetAngles())
                 m:Scale(Vector(1, 1, 1))
-
-            local c = self:GetColor()
-            image.material:SetVector("$color", Vector(c.r / 255, c.g / 255, c.b / 255))
-            image.material:SetFloat("$alpha", c.a / 255)
-            image.material:SetInt("$flags", ImageStickers.GetFlags(self))
-            
+                
             isRenderingImage = true
-            cam.PushModelMatrix(m)
-                render.DrawQuadEasy(Vector(0, 0, -1.45), Vector(0,0,1), self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
-            cam.PopModelMatrix()
+            cam_PushModelMatrix(m)
+                render_DrawQuadEasy(Vector(0, 0, -1.45), Vector(0,0,1), self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
+            cam_PopModelMatrix()
 
-            render.SuppressEngineLighting(false) 
+            render_SuppressEngineLighting(false) 
         end
     end
 
     local drawRenderAnimatedBorder = hoveredEnt == self
     
     if drawRenderAnimatedBorder or shouldDraw2D or renderDebuggingInformation then
-        cam.Start3D2D(lv, la, 0.08)
+        local lv, la = self:LocalToWorld(Vector(0, 0,0.5)), self:LocalToWorldAngles(Angle(0,90,00))
+        cam_Start3D2D(lv, la, 0.08)
             if image == nil then
                 TextResult = ImageStickers.Language.GetPhrase("imagesticker.nourl", "No URL")
             else

@@ -1,4 +1,10 @@
 --TODO: provide more hosting providers? allow servers to disable imgur exclusivity in favor of a whitelist system?
+local allowedFileExtensions = {
+    jpg = true,
+    jpeg = true,
+    png = true,
+    gif = true 
+}
 function ImageStickers.IsImgurLink(link)
     if link == "" then
         return false, "", "No URL"
@@ -25,6 +31,11 @@ function ImageStickers.IsImgurLink(link)
             end
 
             character_pos = character_pos + 1
+        end
+        
+        local extension = string.GetExtensionFromFilename(file_name)
+        if not allowedFileExtensions[extension] then
+            return false, "", "Bad image format (must end with " .. table.concat(table.GetKeys(allowedFileExtensions), ", ") .. ")"
         end
 
         return true, file_name, link

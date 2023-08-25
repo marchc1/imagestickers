@@ -141,7 +141,35 @@ function ENT:SetupDataTables()
     end
     self:NetworkVarNotify("ImageURL", self.OnImageURLChange)
     if CLIENT then
-                
+        self.LastUpdateCheck = CurTime()
+
+        self.Updates = {
+            {
+                check = function(x) return x:GetColor() end, change = function(self, ent) 
+                    local c = self.value
+                    
+                    ent.image.material:SetVector("$color", Vector(c.r / 255, c.g / 255, c.b / 255))
+                    ent.image.material:SetFloat("$alpha", c.a / 255)
+                end
+            },
+            {   check = function(x) return x:GetAdditive() end, change = function(self, ent) 
+                    ent.image.material:SetInt("$flags", ImageStickers.GetFlags(ent))
+                end 
+            },
+            {   check = function(x) return x:GetShouldImageTestAlpha() end, change = function(self, ent) 
+                    ent.image.material:SetInt("$flags", ImageStickers.GetFlags(ent))
+                end 
+            },
+            {   check = function(x) return x:GetTranslucency() end, change = function(self, ent) 
+                    ent.image.material:SetInt("$flags", ImageStickers.GetFlags(ent))
+                end 
+            },
+            {   check = function(x) return x:GetNocull() end, change = function(self, ent) 
+                    ent.image.material:SetInt("$flags", ImageStickers.GetFlags(ent))
+                end 
+            }
+        }
+
         local scale = Vector(1,1,0.1)
 
         local mat = Matrix()
@@ -166,6 +194,19 @@ function ENT:ForceGPU()
     self.GPU = {RT = self.image.material:GetName()}
 end
 
+if CLIENT then
+    function ENT:Invalidate()
+        if not self.image then return end
+
+        for _, v in ipairs(self.Updates) do
+            v.value = v.check(self)
+            if self.image:readytodraw() then
+                v:change(self)
+            end
+        end
+    end
+end
+
 function ENT:OnImageURLChange(name, old, new)
     if CLIENT then
         self:ProcessImageURL(new)
@@ -187,32 +228,48 @@ function ENT:CheckIfURLCached()
     timer.Simple(1, function() if not IsValid(self) then return end self.CheckIfURLCached(self) end)
 end
 
+function ENT:NewImageStruct(errored, loading)
+    local ret = {
+        errored = errored or false,
+        loading = loading,
+
+        readytodraw = function(self)
+            return self.errored == false and self.loading == false
+        end,
+        setError = function(self, reason)
+            self.errored = true
+            self.error = reason
+        end
+    }
+    return ret
+end
+
 function ENT:ProcessImageURL(new)
     if SERVER then return end
 
-    self.image = {loading = true}
+    self.image = self:NewImageStruct(false, true)
 
     local final_link = string.Replace(new, ".jpeg", ".jpg")
     local isImgur, imgurID, linkorerr = ImageStickers.IsImgurLink(final_link)
     local animated = string.EndsWith(imgurID, ".gif")
 
     if not isImgur then
-        self.image = {errored = true, error = linkorerr}
+        self.image = self:NewImageStruct()
+        self.image:setError(linkorerr)
     else
         if imagecache[imgurID] == nil then
             http.Fetch("https://" .. linkorerr, 
                 function(body, size, headers, code)
                     if code == 404 then
-                        self.image = {errored = true, error = "Not found [404]"}
+                        self.image = self:NewImageStruct()
+                        self.image:setError("Not found [404]") 
                         return
                     end
 
-                    self.image = {
-                        loading = true,
-                        errored = false,
-                        animated = animated,
-                        link = new
-                    }
+                    self.image = self:NewImageStruct(false, true)
+                    self.image.animated = animated
+                    self.image.link = new
+                    
                     file.CreateDir("temp/imagesticker/")
                     local saved_data = string.Replace("temp/imagesticker/" .. imgurID, ".gif", ".dat")
                     file.Write(saved_data, body)
@@ -242,18 +299,17 @@ function ENT:ProcessImageURL(new)
                         self.image.material = mat
                         self:ForceGPU()
                     else
-                        self.image.loading = false
-                        self.image.errored = true
-                        self.image.error = ImageStickers.Language.GetPhrase("imagesticker.gifnotsuppported", "GIF files are currently not supported.")
+                        self.image = self:NewImageStruct()
+                        self.image:setError(ImageStickers.Language.GetPhrase("imagesticker.gifnotsuppported", "GIF files are currently not supported."))
                     end
                     imagecache[imgurID] = self.image
                     self.image.loading = false
+                    
+                    self:Invalidate()
                 end,
                 function(err)
-                    self.image = {
-                        errored = true,
-                        error = "Bad HTTP: " .. err
-                    }
+                    self.image = self:NewImageStruct()
+                    self.image:setError("Bad HTTP: " .. err)
                 end, 
             {})
         else
@@ -265,13 +321,7 @@ function ENT:ProcessImageURL(new)
 end
 
 function ENT:Draw()
-    local m = Matrix()
-    if self.image ~= nil and (self.image.errored == false and self.image.loading == false) then
-        m:Scale(Vector(0, 0, 0))
-    else
-        m:Scale(Vector(1, 1, 0.1))
-    end
-    self:EnableMatrix("RenderMultiply", m)
+    --local stopwatchStart = SysTime()
     self:DrawModel()
 
     ImageStickers.RenderImageOntoSticker(self)
@@ -280,8 +330,43 @@ function ENT:Draw()
     if not self:GetShouldImageGlow() then
         render.RenderFlashlights(function() ImageStickers.RenderImageOntoSticker(self) end)
     end
+    --print("Time taken to render entity:", (SysTime() - stopwatchStart) * 1000,"ms")
 end
 
 function ENT:GetBorderRect3D()
     return ImageStickers.GetBorderRect3D(self)
+end
+
+function ENT:Think()
+    if SERVER then return end
+
+    local now = CurTime()
+    if now - (self.LastUpdateCheck or 0) < 0.1 then return end
+
+    local imageStatus = false
+    if self.image ~= nil and self.image:readytodraw() then
+        imageStatus = true
+        for _, v in ipairs(self.Updates) do
+            local last = v.value
+            v.value = v.check(self)
+            if last ~= v.value then
+                v:change(self)
+            end
+        end
+    else
+        imageStatus = false
+    end
+
+    if self.LastUpdateImageStatus ~= imageStatus then
+        local m = Matrix()
+        if imageStatus then
+            m:Scale(Vector(0, 0, 0))
+        else
+            m:Scale(Vector(1, 1, 0.1))
+        end
+        self:EnableMatrix("RenderMultiply", m)
+    end
+
+    self.LastUpdateImageStatus = imageStatus
+    self.LastUpdateCheck = now
 end
