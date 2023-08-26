@@ -159,6 +159,8 @@ function ImageStickers.GetBorderRect3D(self)
     }
 end
 
+local imagePosition, imageNormal = Vector(0, 0, -1.45), Vector(0,0,1)
+
 function ImageStickers.RenderImageOntoSticker(self)
     if not self.Smoothing then
         local f, z, r = 4.461, 1.5, 1.91
@@ -220,7 +222,7 @@ function ImageStickers.RenderImageOntoSticker(self)
                 
             isRenderingImage = true
             cam_PushModelMatrix(m)
-                render_DrawQuadEasy(Vector(0, 0, -1.45), Vector(0,0,1), self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
+                render_DrawQuadEasy(imagePosition, imageNormal, self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
             cam_PopModelMatrix()
 
             render_SuppressEngineLighting(false) 
