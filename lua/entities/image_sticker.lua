@@ -244,6 +244,35 @@ function ENT:NewImageStruct(errored, loading)
     return ret
 end
 
+function ENT:CreateImage(materialData, animated, link, imgurID)
+    self.image = self:NewImageStruct(false, true)
+    self.image.animated = animated
+    self.image.link = link
+    self.image.width = materialData.width
+    self.image.height = materialData.height
+
+    mat = CreateMaterial("imageloader_" .. imgurID .. SysTime(), "VertexLitGeneric", {
+        ["$alpha"] = 1,
+        ["$basetexture"] = materialData.raw:GetString("$basetexture"),
+        ["$model"] = 1,
+        ["$translucent"] = 1,
+        ["$nocull"] = 0,
+        ["$vertexalpha"] = 1,
+        ["$vertexcolor"] = 1,
+        ["$vertexalphatest"] = 1,
+      } 
+    )
+    mat:SetInt("$flags", 0)
+
+    ImageStickers.Debug(mat:GetString("$basetexture"))
+    mat:Recompute()
+    self.image.material = mat
+
+    self.image.loading = false
+    self:Invalidate()
+    self:ForceGPU()
+end
+
 function ENT:ProcessImageURL(new)
     if SERVER then return end
 
@@ -266,46 +295,24 @@ function ENT:ProcessImageURL(new)
                         return
                     end
 
-                    self.image = self:NewImageStruct(false, true)
-                    self.image.animated = animated
-                    self.image.link = new
-                    
                     file.CreateDir("temp/imagesticker/")
                     local saved_data = string.Replace("temp/imagesticker/" .. imgurID, ".gif", ".dat")
                     file.Write(saved_data, body)
 
                     if not animated then
                         --Load file as material
-                        local mat = Material("../data/temp/imagesticker/" .. imgurID, "nocull")
-                        self.image.width = mat:GetInt("$realwidth")
-                        self.image.height = mat:GetInt("$realheight")
-                        
-                        
-                        mat = CreateMaterial("imageloader_" .. imgurID .. SysTime(), "VertexLitGeneric", {
-                            ["$alpha"] = 1,
-                            ["$basetexture"] = mat:GetString("$basetexture"),
-                            ["$model"] = 1,
-                            ["$translucent"] = 1,
-                            ["$nocull"] = 0,
-                            ["$vertexalpha"] = 1,
-                            ["$vertexcolor"] = 1,
-                            ["$vertexalphatest"] = 1,
-                          } 
-                        )
-                        mat:SetInt("$flags", 0)
+                        local rawMaterial = Material("../data/temp/imagesticker/" .. imgurID, "nocull")
+                        local materialData = {}
 
-                        ImageStickers.Debug(mat:GetString("$basetexture"))
-                        mat:Recompute()
-                        self.image.material = mat
-                        self:ForceGPU()
+                        materialData.raw = rawMaterial
+                        materialData.width = rawMaterial:GetInt("$realwidth")
+                        materialData.height = rawMaterial:GetInt("$realheight")
+                        imagecache[imgurID] = materialData
+                        self:CreateImage(materialData, animated, new, imgurID)
                     else
                         self.image = self:NewImageStruct()
                         self.image:setError(ImageStickers.Language.GetPhrase("imagesticker.gifnotsuppported", "GIF files are currently not supported."))
                     end
-                    imagecache[imgurID] = self.image
-                    self.image.loading = false
-                    
-                    self:Invalidate()
                 end,
                 function(err)
                     self.image = self:NewImageStruct()
@@ -313,7 +320,8 @@ function ENT:ProcessImageURL(new)
                 end, 
             {})
         else
-            self.image = imagecache[imgurID]
+            local materialData = imagecache[imgurID]
+            self:CreateImage(materialData, animated, new, imgurID)
         end
     end
 
