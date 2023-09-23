@@ -118,13 +118,17 @@ function ImageStickers.RenderAnimatedBorder(self, w, h)
     surface.DrawLine(w + offsetV, h + offsetV, w + offsetV, -h - offsetV) --right line
 end
 
+--https://developer.valvesoftware.com/wiki/Material_Flags
 function ImageStickers.GetFlags(self)
     local additive = self:GetAdditive() == true and 128 or 0
     local enableAlphaTest = self:GetShouldImageTestAlpha() == true and 256 or 0
     local translucent = self:GetTranslucency() == true and 2097152 or 0
     local nocull = self:GetNocull() == true and 8192 or 0
 
-    return additive + enableAlphaTest + translucent + nocull
+    --possible black box fix?
+    local default_flag = 16 + 32 --vertex color & vertex alpha
+
+    return default_flag + additive + enableAlphaTest + translucent + nocull
 end
 
 local math_Clamp = math.Clamp
