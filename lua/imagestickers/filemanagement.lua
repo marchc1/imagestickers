@@ -10,5 +10,5 @@ local function cleanup()
     end
 end
 
-timer.Create("march.imagestickers.cleanup", 5, 0, function() cleanup() end)
+--timer.Create("march.imagestickers.cleanup", 5, 0, function() end)
 cleanup()
