@@ -125,10 +125,7 @@ function ImageStickers.GetFlags(self)
     local translucent = self:GetTranslucency() == true and 2097152 or 0
     local nocull = self:GetNocull() == true and 8192 or 0
 
-    --possible black box fix?
-    local default_flag = 16 + 32 --vertex color & vertex alpha
-
-    return default_flag + additive + enableAlphaTest + translucent + nocull
+    return additive + enableAlphaTest + translucent + nocull + 16 -- 16 = vertex color
 end
 
 local math_Clamp = math.Clamp
