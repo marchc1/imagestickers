@@ -541,7 +541,7 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
     window.offsetRender = offsetRender
     window.closingMult = 1
 
-    window.Text = "Editing Image Sticker [" .. tostring(ent:EntIndex()) .. "]'s properties"
+    window.Text = string.Replace(ImageStickers.Language.GetPhrase("imagesticker.ui.editingtitle"), "{ENTID}", "[" .. tostring(ent:EntIndex()) .. "]")
 
     window.PostPaint = function(self, w, h)
         local cval = math.Clamp((getLifetime() - self.renderOffset) * fadeinSpeed, 0, 1) * window.closingMult
@@ -624,7 +624,7 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
                 for _, v in ipairs(children) do
                     local panelType = v:GetName()
                     if panelType == "DTextEntry" then
-                        v:SetPlaceholderText("Paste an i.imgur.com link here...")
+                        v:SetPlaceholderText(ImageStickers.Language.GetPhrase("imagesticker.ui.pastelink"))
                         row.ExtraPaintOperation = function(color) local c2 = hsvAdjust(color, 0, 0.3, 0.5) v:SetPlaceholderColor(c2) v:SetTextColor(color) end
                     elseif panelType == "DNumSlider" then
                         FixNumSlider(v)
@@ -672,7 +672,7 @@ local textNotice = vgui.RegisterTable( {
 
 
 local edit_imagestickers = {
-	MenuLabel = "Edit Image Sticker...",
+	MenuLabel = ImageStickers.Language.GetPhrase("imagesticker.openprompt"),
 	Order = 90001,
 	PrependSpacer = true,
 	MenuIcon = "icon16/image_edit.png",
@@ -761,19 +761,19 @@ local edit_imagestickers = {
         local notice = control:GetCanvas():Add(textNotice)
         notice.window = window
         notice.renderOffset = window.offsetRender()
-        notice.Label:SetText("Image links must come from i.imgur.com. No other image links will be accepted.")
+        notice.Label:SetText(ImageStickers.Language.GetPhrase("imagesticker.ui.notify_imagelinks"))
         notice.Label:Dock(BOTTOM)
 
         local notice2 = control:GetCanvas():Add(textNotice)
         notice2.window = window
         notice2.renderOffset = window.offsetRender()
-        notice2.Label:SetText("Other parameters, such as image color and opacity, can be adjusted with the standard Color tool.")
+        notice2.Label:SetText(ImageStickers.Language.GetPhrase("imagesticker.ui.notify_colorswork"))
         notice2.Label:Dock(BOTTOM)
 
         local notice3 = control:GetCanvas():Add(textNotice)
         notice3.window = window
         notice3.renderOffset = window.offsetRender()
-        notice3.Label:SetText("If enabling translucency/additive mode causes rendering issues, try setting the stickers alpha channel instead.")
+        notice3.Label:SetText(ImageStickers.Language.GetPhrase("imagesticker.ui.notify_transpencytip"))
         notice3.Label:Dock(BOTTOM)
 	end
 }

@@ -34,7 +34,7 @@ includeCS("filemanagement.lua")
 includeSV("assignment.lua")
 includeSV("logging.lua")
 includeCS("renderer.lua")
-includeCS("language.lua")
+includeSH("language.lua")
 includeCS("properties.lua")
 
 ImageStickers.Log("Loaded!")

@@ -33,8 +33,8 @@ function ENT:SetupDataTables()
 	self:NetworkVar("String", 0, "ImageURL", { 
         KeyName = "imageurl",
         Edit = {
-            title = "Image URL",
-            category = "Image Settings",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.imageurl"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_imagesettings"),
             type = "Generic",
             order = 1,
             waitforenter = true
@@ -44,8 +44,8 @@ function ENT:SetupDataTables()
     self:NetworkVar("Float", 0, "ImageAngle", { 
         KeyName = "imageangle",
         Edit = {
-            title = "Image Angle",
-            category = "Image Settings",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.imageangle"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_imagesettings"),
             type = "Float",
             order = 2,
             min = 0,
@@ -56,8 +56,8 @@ function ENT:SetupDataTables()
     self:NetworkVar("Float", 1, "ImageScale", { 
         KeyName = "imagescale",
         Edit = {
-            title = "Image Scale",
-            category = "Image Settings",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.imagescale"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_imagesettings"),
             type = "Float",
             order = 3,
             min = 0.01,
@@ -67,8 +67,8 @@ function ENT:SetupDataTables()
     self:NetworkVar("Float", 2, "ImageScaleX", { 
         KeyName = "imagescalex",
         Edit = {
-            title = "Image Scale X",
-            category = "Image Settings",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.imagescalex"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_imagesettings"),
             type = "Float",
             order = 4,
             min = 0.01,
@@ -78,8 +78,8 @@ function ENT:SetupDataTables()
     self:NetworkVar("Float", 3, "ImageScaleY", { 
         KeyName = "imagescaley",
         Edit = {
-            title = "Image Scale Y",
-            category = "Image Settings",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.imagescaley"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_imagesettings"),
             type = "Float",
             order = 5,
             min = 0.01,
@@ -89,16 +89,16 @@ function ENT:SetupDataTables()
     self:NetworkVar("Bool", 0, "ShouldImageGlow", { 
         KeyName = "imageglow",
         Edit = {
-            title = "Should the image glow in the dark?",
-            category = "Look & Feel",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.glowinthedark"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_lookandfeel"),
             type = "Boolean"
         } 
     })
     self:NetworkVar("Bool", 1, "ShouldImageTestAlpha", {
         KeyName = "testalpha",
         Edit = {
-            title = "Enable alphatest?",
-            category = "Look & Feel",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.enablealphatest"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_lookandfeel"),
             type = "Boolean"
         }
     })
@@ -106,25 +106,25 @@ function ENT:SetupDataTables()
     self:NetworkVar("Bool", 2, "Translucency", {
         KeyName = "translucent",
         Edit = {
-            title = "Enable translucency?",
-            category = "Look & Feel",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.maketranslucent"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_lookandfeel"),
             type = "Boolean"
         }
     })
-
+    print(5)
     self:NetworkVar("Bool", 3, "Additive", {
         KeyName = "additive",
         Edit = {
-            title = "Enable additive rendering?",
-            category = "Look & Feel",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.additiverender"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_lookandfeel"),
             type = "Boolean"
         }
     })
     self:NetworkVar("Bool", 4, "Nocull", {
         KeyName = "nocull",
         Edit = {
-            title = "Render the image on the back side of the entity?",
-            category = "Look & Feel",
+            title = ImageStickers.Language.GetPhrase("imagesticker.ui.renderbackside"),
+            category = ImageStickers.Language.GetPhrase("imagesticker.ui.category_lookandfeel"),
             type = "Boolean"
         }
     })
