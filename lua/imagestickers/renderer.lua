@@ -45,10 +45,10 @@ function ImageStickers.AnimationSmoother(f, z, r, x)
     self.lastupdate = CurTime()
     local tolerance = 0.01
     function self:update(x, xd)
-        if self.y - tolerance <= x and x <= self.y + tolerance then return end
+        if self.y - tolerance <= x and x <= self.y + tolerance then return x end
         
         local t = CurTime() - self.lastupdate
-        if t == 0 then return end
+        if t == 0 then return x end
 
         if xd == nil then
             xd = (x - self.xp)
@@ -161,6 +161,11 @@ function ImageStickers.GetBorderRect3D(self)
 end
 
 local imagePosition, imageNormal = Vector(0, 0, -1.45), Vector(0,0,1)
+local nolighting = CreateMaterial("march_imagestickers_unlittex", "UnlitGeneric", {
+    ["$basetexture"] = "models/debug/debugwhite",
+    ["$selfillum"] = 1,
+    ["$vertexalpha"] = 1
+})
 
 function ImageStickers.RenderImageOntoSticker(self)
     if not self.Smoothing then
@@ -210,22 +215,103 @@ function ImageStickers.RenderImageOntoSticker(self)
             self.Smoothing.ScaleY:update(h)
             self.Smoothing.Angle:update(self:GetImageAngle())
             
-            self:SetRenderBounds(Vector(-w, -h, -1), Vector(w, h, 1))
-
             if self:GetShouldImageGlow() then render_SuppressEngineLighting(true) end
 
             render_SetMaterial(image_material)
+            
+            local magicnumber = ImageStickers.SizeMagicNumber
 
-            local m = Matrix()
+            if self:GetShrinkwrap() then -- Shrinkwrap rendering mode
+                local renderbounds = Vector(400, 400, 400)
+                self:SetRenderBounds(-renderbounds, renderbounds) -- lazy
+                local m = Matrix()
                 m:Translate(self:GetPos())
                 m:Rotate(self:GetAngles())
                 m:Scale(Vector(1, 1, 1))
                 
-            isRenderingImage = true
-            cam_PushModelMatrix(m)
-                render_DrawQuadEasy(imagePosition, imageNormal, self.Smoothing.ScaleX.y/6.252, self.Smoothing.ScaleY.y/6.252, color_white, 180 - self.Smoothing.Angle.y)
-            cam_PopModelMatrix()
+                isRenderingImage = true
+                local points
+                cam_PushModelMatrix(m)
+                    if self:GetDrawShrinkwrapGizmo() and self.StickerOwner == LocalPlayer():SteamID() then
+                        render_DrawQuadEasy(imagePosition + Vector(0,0,1), imageNormal, self.Smoothing.ScaleX.y/magicnumber, self.Smoothing.ScaleY.y/magicnumber, Color(255,255,255,255), 180 - self.Smoothing.Angle.y)
+                        render_SetMaterial(nolighting)
+                        
+                        do -- Draw the preview gizmo
+                            render.DrawSphere(Vector(0,0,0), 2, 16, 8, Color(255,255,255,125))
+                            local s = Vector(self.Smoothing.ScaleY.y/magicnumber/2, self.Smoothing.ScaleX.y/magicnumber/2, 0.5)
+                            render.DrawWireframeBox(Vector(0,0,0), Angle(0,0,0), -s, s, Color(255,255,255,80), true)
+                            render.DrawBox(Vector(0,0,0), Angle(0,0,0), -Vector(s.x, s.y, 327.68), Vector(s.x, s.y, 0), Color(215,235,255,25))
+                            
+                            local arrowLength    = 32 -- Length of arrow
+                            local arrowSize      = 2  -- How wide the arrow head will be
+                            local arrowPokeySize = 8  -- How tall the arrow head will be
+                            local arrowRate      = 2  -- How fast the arrow head spins
+                            local arrowFidelity  = 4  -- How many points the arrow head has
+                            render.DrawLine(Vector(0,0,0), Vector(0,0,-arrowLength), Color(255,255,255,200), true)
+                            
+                            for i = 0, arrowFidelity - 1 do
+                                local coff     = (math.pi / (arrowFidelity / i))       * 2
+                                local coffNext = (math.pi / (arrowFidelity / (i + 1))) * 2
 
+                                local s,  c  = math.sin(CurTime() * arrowRate + coff),     math.cos(CurTime() * arrowRate + coff)
+                                local sn, cn = math.sin(CurTime() * arrowRate + coffNext), math.cos(CurTime() * arrowRate + coffNext)
+                                
+                                -- The lines that draw from the arrow tip, to the base of the arrow head
+                                render.DrawLine(Vector(s * arrowSize,c * arrowSize,-arrowLength + arrowPokeySize), Vector(0,0,-arrowLength), Color(255,255,255,200), true)
+                                -- The lines that draw from the base of the arrow head back into the arrow shaft
+                                render.DrawLine(Vector(s * arrowSize,c * arrowSize,-arrowLength + arrowPokeySize), Vector(0,0,-arrowLength+ arrowPokeySize), Color(255,255,255,200), true)
+                                -- The lines that attach the arrow head pieces together
+                                render.DrawLine(Vector(s * arrowSize,c * arrowSize,-arrowLength + arrowPokeySize), Vector(sn * arrowSize,cn * arrowSize,-arrowLength + arrowPokeySize), Color(255,255,255,200), true)
+                            end
+
+                            -- Approximate renderer of the shrinkwrap (using physics mesh only for performance)
+                            points = ImageStickers.Shrinkwrap.RecalculatePoints(self, self:GetShrinkwrapXRes(), self:GetShrinkwrapYRes(), self:GetShrinkwrapOffset(), 1, self:GetShrinkwrapCullMisses()).points
+                            
+                            for y = 1, #points - 1 do
+                                local row = points[y]
+                                for x = 1, #row - 1 do
+                                    local v1, v2, v3, v4 = points[y][x], points[y][x + 1], points[y + 1][x + 1], points[y + 1][x]
+                                    if ImageStickers.Shrinkwrap.IsQuadLegitimate(v1, v2, v3, v4) then
+                                        render.DrawLine(v1.hitpos, v2.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v2.hitpos, v3.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v3.hitpos, v4.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v4.hitpos, v1.hitpos, Color(255,255,255,200), true)
+                                    end
+                                end
+                            end
+                        end
+                    end
+
+                    -- Draw the actual shrinkwrap mesh
+                    if self.ShrinkwrapMesh ~= nil then
+                        render_SetMaterial(image_material)
+                        self.ShrinkwrapMesh:Draw()
+                    end
+                cam_PopModelMatrix()
+                
+                -- for normal checks (normals may still be messed up...)
+                --[[
+                for y = 1, #points - 1 do
+                    local row = points[y]
+                    for x = 1, #row - 1 do
+                        local v1, v2, v3, v4 = points[y][x], points[y][x + 1], points[y + 1][x + 1], points[y + 1][x]
+                        if ImageStickers.Shrinkwrap.IsQuadLegitimate(v1, v2, v3, v4) then
+                            render.DrawLine(self:LocalToWorld(v1.hitpos), self:LocalToWorld(v1.hitpos) + (v1.normal * 32), Color(200,200,255,200), true)
+                        end
+                    end
+                end]]
+            else -- Normal rendering mode
+                self:SetRenderBounds(Vector(-w, -h, -1), Vector(w, h, 1))
+                local m = Matrix()
+                    m:Translate(self:GetPos())
+                    m:Rotate(self:GetAngles())
+                    m:Scale(Vector(1, 1, 1))
+                    
+                isRenderingImage = true
+                cam_PushModelMatrix(m)
+                    render_DrawQuadEasy(imagePosition, imageNormal, self.Smoothing.ScaleX.y/magicnumber, self.Smoothing.ScaleY.y/magicnumber, color_white, 180 - self.Smoothing.Angle.y)
+                cam_PopModelMatrix()
+            end
             render_SuppressEngineLighting(false) 
         end
     end

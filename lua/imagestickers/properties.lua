@@ -9,12 +9,12 @@ local Outline2 = Color(180, 200, 235, 200)
 local Outline3 = Color(210, 230, 255, 200)
 
 local Label_Normal = Color(190, 220, 235)
-local Label_Disabled = Color(170, 120, 40)
+local Label_Disabled = Color(142, 155, 175)
 local Label_Selected = Color(230, 230, 255)
 
-local CloseButton_Normal = Color(190, 69, 78)
-local CloseButton_Hovered = Color(255, 90, 90)
-local CloseButton_Depressed = Color(121, 15, 2)
+local CloseButton_Normal = Color(210, 100, 90)
+local CloseButton_Hovered = Color(255, 110, 110)
+local CloseButton_Depressed = Color(121, 80, 60)
 
 local surface_DrawRect = surface.DrawRect
 local surface_DrawTexturedRectRotated = surface.DrawTexturedRectRotated
@@ -49,6 +49,8 @@ local function hsvAdjust(color, h, s, v)
     return c2
 end
 
+-- to-do: transfer these functions to a new animation library?
+
 --toggleable animation class. increases/decreases a value by speed based off its internal enabled variable 
 local function ToggleableAnimation(def, speed)
     return {
@@ -67,6 +69,31 @@ local function ToggleableAnimation(def, speed)
             self.lastThink = time
 
             return self.easing(self.val)
+        end
+    }
+end
+
+local function TextAnimator(text, cps, offset)
+    return{
+        __desired_text = text,
+        cps = cps or 100, -- characters per second
+        __text = "",
+        birth = CurTime() + (offset or 0),
+        dead = false,
+        text = function(self)
+            if self.dead then return self.__text end
+            
+            -- check if text has reached desired text?
+            if self.__text == self.__desired_text then 
+                --print(self.__text, "==", self.__desired_text)
+                self.dead = true 
+                return self.__text 
+            end
+             
+            local now = CurTime()
+            local characters = math.Clamp((now - self.birth) * self.cps, 0, #self.__desired_text)
+            self.__text = string.sub(self.__desired_text, 1, characters)
+            return self.__text
         end
     }
 end
@@ -241,6 +268,7 @@ hook.Add("PlayerButtonUp", "march.imagestickers.releaseknobui", function(ply, bt
         end
     end
 end)
+
 
 --most of this is copy-paste from the gmod repo
 local function FixNumSlider(self)
@@ -479,27 +507,43 @@ local function FixNumSlider(self)
     end
 end
 
-local function vscrollbarInject(object) 
+local function vscrollbarInject(animated_parent, object) 
+    local window = animated_parent
+    object.createdTime = CurTime()
+
     object.ScrollwheelBackgroundColor = Outline
     object.ScrollwheelForegroundColor = Outline2
     
+    function object:OnMouseWheeled( dlta )
+        if not self:IsVisible() then return false end
+        self:AnimateTo(self:GetScroll() + (dlta * -48), 0.2, 0, 0.5)
+    end
+
+    function object:Think()
+
+    end
+
 	function object:Paint(w, h)	end
 
 	function object.btnUp:Paint(w, h)
+        local cval = math.Clamp((window.getLifetime() - 1) * (1), 0, 1) * window.closingMult
+
         local w2, h2 = w / 2, h / 2
 
         local arrowWidth, arrowHeight = 4, -2
-        surface_SetDrawColor(object.ScrollwheelForegroundColor)
-
+        surface_SetDrawColor(LerpColorAlpha(object.ScrollwheelForegroundColor, cval))
+        
         surface_DrawLine(w2 - arrowWidth, h2 - arrowHeight, w2, h2 + arrowHeight)
         surface_DrawLine(w2 + (arrowWidth-1), h2 - arrowHeight, w2, h2 + arrowHeight)
 	end
 	
 	function object.btnDown:Paint(w, h)
+        local cval = math.Clamp((window.getLifetime() - 1) * (1), 0, 1) * window.closingMult
+
         local w2, h2 = w / 2, h / 2
         
         local arrowWidth, arrowHeight = 4, 2
-        surface_SetDrawColor(object.ScrollwheelForegroundColor)
+        surface_SetDrawColor(LerpColorAlpha(object.ScrollwheelForegroundColor, cval))
 
         surface_DrawLine(w2 - arrowWidth, h2 - arrowHeight, w2, h2 + arrowHeight)
         surface_DrawLine(w2 + (arrowWidth-1), h2 - arrowHeight, w2, h2 + arrowHeight)
@@ -507,6 +551,8 @@ local function vscrollbarInject(object)
 	
     local gripWidth = 4
 	function object.btnGrip:Paint(w, h)
+        local cval = math.Clamp((window.getLifetime() - 1) * (1), 0, 1) * window.closingMult
+
         if not self.anim then
             self.anim = 0
         end
@@ -514,7 +560,7 @@ local function vscrollbarInject(object)
 
         local w2, h2 = w / 2, h / 2
 
-        draw.RoundedBox(3, gripWidth, 0, w-(gripWidth*2), h, object.ScrollwheelForegroundColor)
+        draw.RoundedBox(3, gripWidth, 0, w-(gripWidth*2), h, Color(LerpColorAlpha(object.ScrollwheelForegroundColor, cval)))
 	end
 end
 
@@ -523,7 +569,7 @@ local fadeinSpeed = 6
 --Turns DEntityProperties into a fancier menu.
 function ImageStickers.NicerProperties(window, entproperties, ent)
     window.createdTime = CurTime()
-    vscrollbarInject(entproperties.Canvas:GetVBar())
+    vscrollbarInject(window, entproperties.Canvas:GetVBar())
 
     local renderOffset = 0.5
     local renderOffsetAdd = 0.05
@@ -553,6 +599,10 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
 
     window.btnClose.DoClick = function(self) window:MarkForDeath() end
 
+    for k, v in pairs(ent.__propcategories) do
+        entproperties.Categories[k].zpos = v
+    end
+
     for catName, cat in SortedPairsByMemberValue(entproperties.Categories, "zpos") do
         cat.renderOffset = offsetRender()
 
@@ -560,6 +610,8 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
         local oldPerfLayout = cat.PerformLayout
         cat.Expand.animatePlus = ToggleableAnimation(0, 8)
         cat.Expand.easing = math.ease.InOutBack
+
+        cat.Label.TextAnimator = TextAnimator(catName, nil, cat.renderOffset)
 
         cat.PerformLayout = function(self)
             oldPerfLayout(self)
@@ -577,7 +629,7 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
 
             cat.Paint = function(self, w, h)
                 cat.Label:SetTextColor(Color(LerpColorAlpha(color_white, math.Clamp((getLifetime() - self.renderOffset) * fadeinSpeed, 0, 1) * window.closingMult)))
-
+                cat.Label:SetText(self.Label.TextAnimator:text())
                 surface.SetDrawColor(LerpColorAlpha(Backdrop, math.Clamp((getLifetime() - self.renderOffset) * fadeinSpeed, 0, 1) * window.closingMult))
                 surface.DrawRect(0, 0, w, h)
                 surface.SetDrawColor(LerpColorAlpha(Outline, math.Clamp((getLifetime() - self.renderOffset) * fadeinSpeed, 0, 1) * window.closingMult))
@@ -586,16 +638,23 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
             cat.Container.Paint = function(self, w, h) end
         end
 
-        for rowName, row in SortedPairsByMemberValue(cat.Rows, "zpos") do
+        for rowName, row in SortedPairsByMemberValue(cat.Rows, "order") do
             local rrenderOffset = offsetRender()
             
             local oldPerfLayout = row.PerformLayout
+            
+            if row.Label.SetText then
+                row.Label.TextAnimator = TextAnimator(rowName, nil, rrenderOffset)
+                function row.Label:Paint(w, h)
+                    draw.SimpleText(self.Text, "DermaDefault", 0, h / 2, self:GetTextColor(), TEXT_ALIGN_LEFT, TEXT_ALIGN_CENTER)
+                end
+            end
 
             row.PerformLayout = function(self)
                 oldPerfLayout(self)
     
                 row.Label:SetTextColor(color_white)
-
+                
                 row.Paint = function(self, w, h)
                     if not IsValid(self.Inner) then return end
 
@@ -613,6 +672,11 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
  
                     self.Label:SetTextColor(Color(LerpColorAlpha(c, math.Clamp((getLifetime() - rrenderOffset) * fadeinSpeed, 0, 1) * window.closingMult)))
                     
+                    if self.Label.SetText ~= nil then
+                        self.Label:SetText("")
+                        self.Label.Text = self.Label.TextAnimator:text()
+                    end
+                    
                     if self.ExtraPaintOperation then
                         self.ExtraPaintOperation(self.Label:GetTextColor())
                     end
@@ -624,11 +688,39 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
                 for _, v in ipairs(children) do
                     local panelType = v:GetName()
                     if panelType == "DTextEntry" then
-                        v:SetPlaceholderText(ImageStickers.Language.GetPhrase("imagesticker.ui.pastelink"))
-                        row.ExtraPaintOperation = function(color) local c2 = hsvAdjust(color, 0, 0.3, 0.5) v:SetPlaceholderColor(c2) v:SetTextColor(color) end
+                        v.TextAnimator = TextAnimator(ImageStickers.Language.GetPhrase("imagesticker.ui.pastelink"), nil, rrenderOffset)
+                        
+                        row.ExtraPaintOperation = function(color) 
+                            local c2 = hsvAdjust(color, 0, 0.3, 0.5) 
+                            v:SetPlaceholderColor(c2) 
+                            v:SetTextColor(color)
+                            v:SetPlaceholderText(v.TextAnimator:text())
+                        end
                     elseif panelType == "DNumSlider" then
                         FixNumSlider(v)
                         row.ExtraPaintOperation = function(color) v.TextArea:SetTextColor(color) end
+                    elseif panelType == "DButton" then
+                        v.animationStateHovered = ToggleableAnimation(0, 7)
+                        v.animationStateDepressed = ToggleableAnimation(0, 7)
+                        v.animationStateHovered.easing = math.ease.InOutQuart
+                        v.animationStateDepressed.easing = math.ease.InOutBack
+                        
+                        v.TextAnimator = TextAnimator(v.Text or "", nil, rrenderOffset)
+
+                        v.Paint = function(self, w, h)
+                            self.animationStateHovered.enabled = self.Hovered 
+                            self.animationStateDepressed.enabled = self.Depressed 
+                    
+                            local hovered, depressed = self.Hovered, self.Depressed
+                    
+                            local color1 = Color(LerpColor(Label_Normal, Label_Selected, self.animationStateHovered:think()))
+                            local color2 = Color(LerpColor(color1, Label_Disabled, self.animationStateDepressed:think()))
+                            local color3 = Color(LerpColorAlpha(color2, math.Clamp((getLifetime() - rrenderOffset) * fadeinSpeed, 0, 1) * window.closingMult ))
+                            surface.SetDrawColor(color3)
+                            surface.DrawOutlinedRect(0, 0, w, h, 1)
+
+                            draw.SimpleText(self.TextAnimator:text(), "DermaDefault", w / 2, h / 2, color3, TEXT_ALIGN_CENTER, TEXT_ALIGN_CENTER)
+                        end
                     elseif panelType == "DCheckBox" then
                         v.animationState = ToggleableAnimation(v:GetChecked() and 1 or 0)
                         v.easing = math.ease.InOutQuart
@@ -648,6 +740,8 @@ function ImageStickers.NicerProperties(window, entproperties, ent)
                                 DrawLine(w * 0.4, h - 2, w - 2, 4, 2, (self.animationState.val - 0.5) * 2)
                             end
                         end
+                    else
+                        print("unsupported element customer for '" .. panelType .. "'")
                     end
                 end
             end
@@ -687,7 +781,7 @@ local edit_imagestickers = {
 		local window = Dialog3Dto2D(ent, ent:GetBorderRect3D())
         window.IsImageStickerDialog = true
 
-		window:SetSize(700, 400)
+		window:SetSize(700, 500)
 		window:SetTitle("")
         window.lblTitle:SetTextColor(Label_Normal)
 		window:Center()
@@ -746,6 +840,91 @@ local edit_imagestickers = {
                 return row
             end
             return cat
+        end
+
+        function control:RebuildControls()
+            self:Clear()
+            if not IsValid(self.m_Entity) then return end
+            
+            local editor = self.m_Entity.__propertiesandtriggers
+
+            local i = 1000
+            for name, edit in pairs(editor) do
+                if edit.order == nil then
+                    edit.order = i
+                end
+
+                i = i + 1
+            end
+            
+            for name, edit in SortedPairsByMemberValue(editor, "order") do
+                self:EditVariable(name, edit)
+            end
+
+            for k, v in SortedPairsByValue(self.m_Entity.__propcategories) do
+                self.Categories[k]:MoveToFront()
+                self.Categories[k]:DockPadding(4,4,4,4)
+                for k2, v2 in SortedPairsByMemberValue(self.Categories[k].Rows, "order") do
+                    v2:MoveToFront()
+                end
+                --entproperties.Categories[k].zpos = v
+            end
+        end
+
+        function control:EditVariable(varname, item)
+            if not istable(item) then return end
+
+            local edit = item.Edit
+
+            local row = self:CreateRow(edit.category or "#entedit.general", edit.title or varname)
+            row.Type = item.PropertyType
+            row.order = edit.order
+
+            if item.PropertyType == "Property" then
+                row:Setup(edit.type, edit)
+                
+                row.DataUpdate = function(_)
+                    if not IsValid(self.m_Entity) then self:EntityLost() return end
+                    row:SetValue(self.m_Entity:GetNetworkKeyValue(varname))
+                end
+
+                row.DataChanged = function(_, val)
+                    if not IsValid(self.m_Entity) then self:EntityLost() return end
+                    self.m_Entity:EditValue(varname, tostring(val))
+                end
+            elseif item.PropertyType == "Trigger" then
+                row.Label:Remove()
+                local p = row:Add("DPanel")
+                row.Inner = p
+                p:Dock(FILL)
+                p.Paint = function() end
+
+                local b = p:Add("DButton")
+                b:Dock(FILL)
+                b:SetText("")
+                p:SetText("")
+                b.Text = edit.title
+                row.Inner = p
+                p.IsEditing = function() return false end
+                row.Label = {}
+                row.Label.SetTextColor = function() end
+                row.Label.SetWide = function() end
+
+                function b.DoClick(_)
+                    if not IsValid(self.m_Entity) then self:EntityLost() return end
+                    
+                    local shf, clf = ent.__propertiesandtriggers[varname].DoShared, ent.__propertiesandtriggers[varname].DoClientside
+                    if shf then shf(ent) end
+                    if clf then clf(ent) end
+
+                    net.Start("march.imagestickers.enttriggers")
+                    net.WriteEntity(self.m_Entity)
+                    net.WriteString(varname)
+                    net.SendToServer()
+                end
+            else
+                print("unexpected item type '" .. item.PropertyType .. "'")
+            end
         end
 
 		control:SetEntity(ent)
