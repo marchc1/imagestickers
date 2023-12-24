@@ -166,6 +166,7 @@ local nolighting = CreateMaterial("march_imagestickers_unlittex", "UnlitGeneric"
     ["$selfillum"] = 1,
     ["$vertexalpha"] = 1
 })
+
 function ImageStickers.RenderImageOntoSticker(self)
     if not self.Smoothing then
         local f, z, r = 4.461, 1.5, 1.91
@@ -229,6 +230,7 @@ function ImageStickers.RenderImageOntoSticker(self)
                 m:Scale(Vector(1, 1, 1))
                 
                 isRenderingImage = true
+                local points
                 cam_PushModelMatrix(m)
                     if self:GetDrawShrinkwrapGizmo() and self.StickerOwner == LocalPlayer():SteamID() then
                         render_DrawQuadEasy(imagePosition + Vector(0,0,1), imageNormal, self.Smoothing.ScaleX.y/magicnumber, self.Smoothing.ScaleY.y/magicnumber, Color(255,255,255,255), 180 - self.Smoothing.Angle.y)
@@ -263,15 +265,18 @@ function ImageStickers.RenderImageOntoSticker(self)
                             end
 
                             -- Approximate renderer of the shrinkwrap (using physics mesh only for performance)
-                            local points = ImageStickers.Shrinkwrap.RecalculatePoints(self, self:GetShrinkwrapXRes(), self:GetShrinkwrapYRes(), self:GetShrinkwrapOffset(), 1).points
+                            points = ImageStickers.Shrinkwrap.RecalculatePoints(self, self:GetShrinkwrapXRes(), self:GetShrinkwrapYRes(), self:GetShrinkwrapOffset(), 1, self:GetShrinkwrapCullMisses()).points
+                            
                             for y = 1, #points - 1 do
                                 local row = points[y]
                                 for x = 1, #row - 1 do
                                     local v1, v2, v3, v4 = points[y][x], points[y][x + 1], points[y + 1][x + 1], points[y + 1][x]
-                                    render.DrawLine(v1.hitpos, v2.hitpos, Color(255,255,255,200), true)
-                                    render.DrawLine(v2.hitpos, v3.hitpos, Color(255,255,255,200), true)
-                                    render.DrawLine(v3.hitpos, v4.hitpos, Color(255,255,255,200), true)
-                                    render.DrawLine(v4.hitpos, v1.hitpos, Color(255,255,255,200), true)
+                                    if ImageStickers.Shrinkwrap.IsQuadLegitimate(v1, v2, v3, v4) then
+                                        render.DrawLine(v1.hitpos, v2.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v2.hitpos, v3.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v3.hitpos, v4.hitpos, Color(255,255,255,200), true)
+                                        render.DrawLine(v4.hitpos, v1.hitpos, Color(255,255,255,200), true)
+                                    end
                                 end
                             end
                         end
@@ -283,6 +288,18 @@ function ImageStickers.RenderImageOntoSticker(self)
                         self.ShrinkwrapMesh:Draw()
                     end
                 cam_PopModelMatrix()
+                
+                -- for normal checks (normals may still be messed up...)
+                --[[
+                for y = 1, #points - 1 do
+                    local row = points[y]
+                    for x = 1, #row - 1 do
+                        local v1, v2, v3, v4 = points[y][x], points[y][x + 1], points[y + 1][x + 1], points[y + 1][x]
+                        if ImageStickers.Shrinkwrap.IsQuadLegitimate(v1, v2, v3, v4) then
+                            render.DrawLine(self:LocalToWorld(v1.hitpos), self:LocalToWorld(v1.hitpos) + (v1.normal * 32), Color(200,200,255,200), true)
+                        end
+                    end
+                end]]
             else -- Normal rendering mode
                 self:SetRenderBounds(Vector(-w, -h, -1), Vector(w, h, 1))
                 local m = Matrix()

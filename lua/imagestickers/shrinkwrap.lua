@@ -77,8 +77,9 @@ end
 local SHRINKWRAP_ACCURACY_PHYSMESH = 1
 local SHRINKWRAP_ACCURACY_VISMESH = 2
 
-function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy)
+function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy, throwawaynonhits)
     accuracy = accuracy or SHRINKWRAP_ACCURACY_VISMESH
+    throwawaynonhits = throwawaynonhits or false
     if SERVER then return end
     
     local meshes = {}
@@ -88,11 +89,12 @@ function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy)
             return meshes[ent]
         end
 
-        meshes[ent] = {triangles = {}}
+        -- meshes[ent] = {triangles = {}}
 
-        local modelMeshes, modelBindPose = util.GetModelMeshes(ent:GetModel(), 0)
-        
-        --debugoverlay.Cross(ent:GetPos(), 64, 10, Color(90, 90, 235), true)
+        local fullModelMesh = shrinkwrap.GetEntityMeshInWorldspace(ent)
+        meshes[ent] = fullModelMesh
+
+        --[[debugoverlay.Cross(ent:GetPos(), 64, 10, Color(90, 90, 235), true)
         for k, modelMesh in ipairs(modelMeshes) do
             for i = 1, #modelMesh.triangles, 3 do
                 local vs = worldTriangle(ent, modelMesh.triangles[i], modelMesh.triangles[i+1], modelMesh.triangles[i+2])
@@ -102,31 +104,43 @@ function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy)
                 --debugoverlay.Line(vs[2], vs[3], 5, color_white, true)
                 --debugoverlay.Line(vs[3], vs[1], 5, color_white, true)
             end
-        end
+        end]]
 
         return meshes[ent]
     end
 
     local function trace(tracedata)
         local t = util.TraceLine(tracedata)
-    
+
         local ent = t.Entity
         if not IsValid(ent) or accuracy < SHRINKWRAP_ACCURACY_VISMESH then return t end
 
+        local hitTriangle = false
         local lastDistance = 2^20
         local lastHit = Vector(2^15,2^15,2^15)
         local mesh = cacheEnt(ent)
         
-        for _, triangle in ipairs(mesh.triangles) do
-            local v1, v2, v3 = triangle[1], triangle[2], triangle[3]
+        for i = 1, #mesh, 3 do
+            local v1, v2, v3 = mesh[i].pos, mesh[i + 1].pos, mesh[i + 2].pos
             local intersectionPoint = shrinkwrap.IntersectLineWithTriangle(tracedata.start, (tracedata.endpos - tracedata.start):GetNormalized(), v1, v2, v3)
             if intersectionPoint ~= nil then
                 local distanceCheck = tracedata.start:Distance(intersectionPoint)
                 if distanceCheck < lastDistance then
                     lastDistance = distanceCheck
                     lastHit = intersectionPoint
+                    hitTriangle = true
                 end
             end
+        end
+        
+        if not hitTriangle then
+            local newfilter = table.Copy(tracedata.filter or {})
+            table.insert(newfilter, t.Entity)
+            return trace{
+                start = tracedata.start,
+                endpos = tracedata.endpos,
+                filter = newfilter 
+            }
         end
 
         t.HitPos = lastHit
@@ -150,7 +164,6 @@ function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy)
 
         local pos = self:LocalToWorld(Vector(posY, posX, -4))
         local trace = trace{start = pos, endpos = pos + (self:GetUp() * -323.69)}
-
         points[y][x] = {
             x = x,
             y = y,
@@ -158,10 +171,14 @@ function shrinkwrap.RecalculatePoints(self, xpoints, ypoints, offset, accuracy)
             yfrac = math.Remap(y, 1, ypoints, 0, 1),
             start = pos,
             hitpos = self:WorldToLocal(trace.HitPos + (trace.HitNormal * offset)),
-            normal = trace.HitNormal,
+            normal = self:WorldToLocal(trace.HitNormal),
             --trace = trace,
             --color = Color(Lerp(x/xpoints,0,255), Lerp(y/ypoints,0,255), 0) --debugging
         }
+
+        if trace.Hit == false and throwawaynonhits then
+            points[y][x].hitpos = Vector(0,0,0)
+        end
     end end
 
     return {
@@ -234,6 +251,7 @@ local function trickMeshNormal(v)
 end
 
 local function vert(self, triangles, v)
+    print(v.normal)
     table.insert(triangles, {
         pos = trickMeshPosition(v.hitpos), 
         normal = trickMeshNormal(v.normal),
@@ -246,6 +264,14 @@ local function tri(self, triangles, v1, v2, v3)
     vert(self, triangles, v1) 
     vert(self, triangles, v2) 
     vert(self, triangles, v3)
+end
+
+-- Point positions that had no hit are saved as zero length vectors, this confirms if the triangle  actually hit the full mesh or not
+function shrinkwrap.IsTriangleLegitimate(v1, v2, v3)
+    return v1.hitpos:LengthSqr() > 0 and v2.hitpos:LengthSqr() > 0 and v3.hitpos:LengthSqr() > 0
+end
+function shrinkwrap.IsQuadLegitimate(v1, v2, v3, v4)
+    return v1.hitpos:LengthSqr() > 0 and v2.hitpos:LengthSqr() > 0 and v3.hitpos:LengthSqr() > 0 and v4.hitpos:LengthSqr() > 0
 end
 
 function shrinkwrap.RecalculateMesh(self, pointsstruct)
@@ -261,12 +287,56 @@ function shrinkwrap.RecalculateMesh(self, pointsstruct)
         local row = points[y]
         for x = 1, #row - 1 do
             local v1, v2, v3, v4 = points[y][x], points[y][x + 1], points[y + 1][x + 1], points[y + 1][x]
-            tri(self, triangles, v1, v2, v3)
-            tri(self, triangles, v3, v4, v1)
+            if shrinkwrap.IsTriangleLegitimate(v1, v2, v3) then
+                tri(self, triangles, v1, v2, v3)
+            end
+            if shrinkwrap.IsTriangleLegitimate(v3, v4, v1) then
+                tri(self, triangles, v3, v4, v1)
+            end
         end
     end
 
     self.ShrinkwrapMesh:BuildFromTriangles(triangles)
+end
+
+-- Thank you https://github.com/Derpius/VisTrace/blob/master/source/objects/AccelStruct.cpp#L34 for saving me from more matrix math
+-- This function takes into account everything with regards to transformations that the object could have and returns the worldspace
+-- model mesh (as viewed by the player right now) for use with the triangle intersection algorithm for precise wrapping
+function shrinkwrap.GetEntityMeshInWorldspace(ent)
+    if not IsValid(ent) then return end
+    
+    local model = ent:GetModel()
+    local modelMesh, modelBind = util.GetModelMeshes(model, 0) -- LOD zero
+
+    if not modelMesh then return end
+
+    local mesh = {}
+    for _, objectPart in ipairs(modelMesh) do
+        for _, v in ipairs(objectPart.triangles) do
+            local vertex = Matrix()
+            vertex:SetTranslation(v.pos)
+
+            local vertex_weights = v.weights
+
+            local final = Vector()
+
+            for _, boneVertexData in ipairs(vertex_weights) do
+                local add = (
+                    ent:GetBoneMatrix(boneVertexData.bone) * 
+                    modelBind[boneVertexData.bone].matrix * 
+                    vertex 
+                )
+                local addV = add:GetTranslation()
+                final = final + (addV * boneVertexData.weight)
+            end
+            
+            local newTri = {}
+            for k, v in pairs(v) do newTri[k] = v end
+            newTri.pos = final
+            table.insert(mesh, newTri)
+        end
+    end
+    return mesh
 end
 
 local SHRINKWRAP_STORE_HEADER  = "ISSW"
